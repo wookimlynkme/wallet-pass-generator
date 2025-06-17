@@ -6,21 +6,17 @@ require('dotenv').config();
 
 class AppleWallet {
   constructor() {
-    // Certificate paths should be loaded from environment variables in production
     this.certDirectory = process.env.APPLE_CERT_DIRECTORY || path.join(__dirname, 'certificates');
-    
-    // Validate certificates exist
     this.validateCertificates();
   }
-  
+
   validateCertificates() {
     const requiredFiles = [
       'wwdr.pem',
       'signerCert.pem',
-      'signerKey.pem',
-      'passTypeIdentifier.pem'
+      'signerKey.pem'
     ];
-    
+
     requiredFiles.forEach(file => {
       const filePath = path.join(this.certDirectory, file);
       if (!fs.existsSync(filePath)) {
@@ -37,7 +33,6 @@ class AppleWallet {
    */
   async generatePass(userId, passData) {
     try {
-      // Create a new pass instance
       const pass = new PKPass({
         model: path.join(__dirname, 'models', 'eventTicket.pass'),
         certificates: {
@@ -47,62 +42,75 @@ class AppleWallet {
           signerKeyPassphrase: process.env.APPLE_CERT_PASSWORD || ''
         }
       });
-      
-      // Set pass information
+
+      // Header field
       pass.headerFields.push({
-        key: 'header',
+        key: 'event',
         label: passData.headerLabel || 'EVENT',
-        value: passData.headerValue || 'VIP Access',
-        textAlignment: 'PKTextAlignmentNatural'
+        value: passData.headerValue || 'VIP Access'
       });
-      
+
+      // Primary field
       pass.primaryFields.push({
-        key: 'title',
-        label: passData.primaryLabel || 'TITLE',
-        value: passData.primaryValue || 'Event Access Pass',
-        textAlignment: 'PKTextAlignmentNatural'
+        key: 'name',
+        label: passData.primaryLabel || 'NAME',
+        value: passData.memberName || 'Member'
       });
-      
+
+      // Secondary field
       pass.secondaryFields.push({
-        key: 'secondary',
+        key: 'location',
         label: passData.secondaryLabel || 'LOCATION',
-        value: passData.secondaryValue || 'Main Entrance',
-        textAlignment: 'PKTextAlignmentNatural'
+        value: passData.location || 'Main Entrance'
       });
-      
-      // Set unique pass identifier
+
+      // Auxiliary (optional)
+      if (passData.subheader) {
+        pass.auxiliaryFields = [
+          {
+            key: 'sub',
+            label: 'SUBHEADER',
+            value: passData.subheader
+          }
+        ];
+      }
+
+      // Set a unique serial number
       pass.serialNumber = `pass-${userId}-${Date.now()}`;
-      
-      // Organization info
+
+      // General info
       pass.organizationName = passData.organizationName || 'Your Organization';
       pass.description = passData.description || 'Event Access Pass';
-      
-      // Generate the pass file
+
+      // Barcode
+      pass.barcodes = [
+        {
+          format: 'PKBarcodeFormatQR',
+          message: passData.referrerPath || `pass-${userId}`,
+          messageEncoding: 'iso-8859-1'
+        }
+      ];
+
+      // Images (optional logo or hero image)
+      if (passData.logoPath && fs.existsSync(passData.logoPath)) {
+        pass.loadImage('icon.png', fs.readFileSync(passData.logoPath));
+        pass.loadImage('logo.png', fs.readFileSync(passData.logoPath));
+      }
+
+      // Create the pass
       const passBuffer = pass.getAsBuffer();
-      
-      // In a production environment, you would:
-      // 1. Save the pass file to cloud storage (AWS S3, GCP Cloud Storage, etc.)
-      // 2. Return a signed URL to download the pass
-      
-      // For this example, we'll assume a cloud service that stores and returns a URL
+
+      // Upload pass to cloud and return URL (stub)
       const passUrl = await this.uploadPassToCloud(passBuffer, userId);
-      
       return passUrl;
     } catch (error) {
       console.error('Error generating Apple Wallet pass:', error);
       throw new Error('Failed to generate Apple Wallet pass');
     }
   }
-  
-  /**
-   * Upload the pass to cloud storage and return a URL
-   * This is a stub - implement with your preferred cloud storage
-   */
+
   async uploadPassToCloud(passBuffer, userId) {
-    // Implement with AWS S3, GCP Cloud Storage, etc.
-    // For now, return a placeholder URL
-    
-    // In a production environment, replace with actual upload code
+    // In production, use S3/GCS/etc.
     return `https://your-api-domain.com/passes/apple/${userId}-${Date.now()}.pkpass`;
   }
 }

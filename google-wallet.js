@@ -1,20 +1,25 @@
 // File: google-wallet.js
-const { GoogleAuth } = require('google-auth-library');
+const fs = require('fs');
+const path = require('path');
 const { JWT } = require('google-auth-library');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 class GoogleWallet {
   constructor() {
-    // Google credentials should be loaded from environment variables
+    // 🔐 Load credentials from JSON file
+    const keyPath = path.join(__dirname, 'keys', 'service-account.json');
+    const keyFile = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
+
     this.issuerId = process.env.GOOGLE_WALLET_ISSUER_ID;
-    this.serviceAccountEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-    this.serviceAccountPrivateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
+    this.serviceAccountEmail = keyFile.client_email;
+    this.serviceAccountPrivateKey = keyFile.private_key;
+    this.privateKeyId = keyFile.private_key_id;
     this.classId = process.env.GOOGLE_WALLET_CLASS_ID || 'generic-pass';
-    
-    // Initialize Google auth client
+
     this.initializeAuthClient();
   }
-  
+
   initializeAuthClient() {
     try {
       this.authClient = new JWT({
@@ -28,18 +33,10 @@ class GoogleWallet {
     }
   }
 
-  /**
-   * Generates a Google Wallet pass
-   * @param {string} userId - Unique identifier for the user
-   * @param {object} passData - Data to include in the pass
-   * @returns {Promise<string>} - URL to the generated pass (or JWT link)
-   */
   async generatePass(userId, passData) {
     try {
-      // Create a unique object ID for this pass
       const objectId = `${this.issuerId}.${userId}-${Date.now()}`;
-      
-      // Create pass object definition
+
       const genericObject = {
         id: objectId,
         classId: `${this.issuerId}.${this.classId}`,
@@ -47,7 +44,7 @@ class GoogleWallet {
         hexBackgroundColor: passData.backgroundColor || '#4285f4',
         logo: {
           sourceUri: {
-            uri: passData.logoUrl || 'https://your-api-domain.com/assets/logo.png'
+            uri: passData.logoUrl
           }
         },
         cardTitle: {
@@ -70,11 +67,11 @@ class GoogleWallet {
         },
         barcode: {
           type: 'QR_CODE',
-          value: objectId
+          value: passData.referrerPath || objectId
         },
         heroImage: {
           sourceUri: {
-            uri: passData.heroImageUrl || 'https://your-api-domain.com/assets/hero.jpg'
+            uri: passData.heroImageUrl
           }
         },
         textModulesData: [
@@ -90,58 +87,46 @@ class GoogleWallet {
           }
         ]
       };
-      
-      // First, check if class exists, create if not
+
       await this.ensureClassExists();
-      
-      // Create the pass object
-      const response = await this.createPassObject(genericObject);
-      
-      // Generate a JWT link for the pass
+      await this.createPassObject(genericObject);
+
       const passJwt = await this.createJwtLink(objectId);
-      
       return `https://pay.google.com/gp/v/save/${passJwt}`;
     } catch (error) {
       console.error('Error generating Google Wallet pass:', error);
       throw new Error('Failed to generate Google Wallet pass');
     }
   }
-  
-  /**
-   * Ensure the class for this pass type exists in Google Wallet
-   */
+
   async ensureClassExists() {
     try {
       const classId = `${this.issuerId}.${this.classId}`;
       const url = `https://walletobjects.googleapis.com/walletobjects/v1/genericClass/${classId}`;
-      
-      // Try to get the class first
+
       try {
         await this.authClient.request({ url });
-        // Class exists, no need to create
         return;
       } catch (error) {
-        // If 404, create the class
         if (error.response && error.response.status === 404) {
-          // Create new class
           const classUrl = 'https://walletobjects.googleapis.com/walletobjects/v1/genericClass';
-          
+
           const classData = {
             id: classId,
-            issuerName: 'Your Organization',
+            issuerName: 'LynkMe',
             reviewStatus: 'UNDER_REVIEW',
             multipleDevicesAndHoldersAllowedStatus: 'ONE_USER_ALL_DEVICES'
           };
-          
+
           await this.authClient.request({
             url: classUrl,
             method: 'POST',
             data: classData
           });
-          
+
           return;
         }
-        
+
         throw error;
       }
     } catch (error) {
@@ -149,44 +134,43 @@ class GoogleWallet {
       throw new Error('Failed to create or verify pass class');
     }
   }
-  
-  /**
-   * Create a pass object in Google Wallet
-   */
+
   async createPassObject(genericObject) {
     try {
       const objectUrl = 'https://walletobjects.googleapis.com/walletobjects/v1/genericObject';
-      
+
       const response = await this.authClient.request({
         url: objectUrl,
         method: 'POST',
         data: genericObject
       });
-      
+
       return response.data;
     } catch (error) {
       console.error('Error creating pass object:', error);
       throw new Error('Failed to create pass object');
     }
   }
-  
-  /**
-   * Create a JWT link for the pass
-   */
+
   async createJwtLink(objectId) {
     const claims = {
       iss: this.serviceAccountEmail,
       aud: 'google',
-      origins: ['your-webflow-domain.com'],
       typ: 'savetowallet',
       payload: {
-        genericObjects: [
-          { id: objectId }
-        ]
+        genericObjects: [{ id: objectId }]
       }
     };
-    
-    const token = await this.authClient.sign(claims);
+
+    const token = jwt.sign(claims, this.serviceAccountPrivateKey, {
+      algorithm: 'RS256',
+      header: {
+        kid: this.privateKeyId,
+        typ: 'JWT',
+        alg: 'RS256'
+      }
+    });
+
     return token;
   }
 }
