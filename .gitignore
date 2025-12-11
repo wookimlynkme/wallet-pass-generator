@@ -1,3 +1,21 @@
-certificates/
-.env
+# macOS
+.DS_Store
+
+# Output / temp
+Zip/
+*.pkpass
+*.headers
+
+# Keys / secrets
+keys/
+
+# Node
 node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Env files
+.env
+.env.*
+
+certificates/

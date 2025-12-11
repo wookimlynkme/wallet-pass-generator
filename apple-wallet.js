@@ -1,117 +1,88 @@
-// File: apple-wallet.js
-const fs = require('fs');
-const path = require('path');
-const PKPass = require('passkit-generator').PKPass;
-require('dotenv').config();
+// apple-wallet.js — CommonJS, passkit-generator v3
+// npm i passkit-generator@^3
+const fs = require("fs");
+const path = require("path");
+const { PKPass } = require("passkit-generator");
+
+function mustDir(p) {
+  if (!fs.existsSync(p)) throw new Error(`Missing required folder: ${p}`);
+  return p;
+}
+function mustFile(p) {
+  if (!fs.existsSync(p)) throw new Error(`Missing required file: ${p}`);
+  return p;
+}
 
 class AppleWallet {
   constructor() {
-    this.certDirectory = process.env.APPLE_CERT_DIRECTORY || path.join(__dirname, 'certificates');
-    this.validateCertificates();
+    const certDir = process.env.APPLE_CERT_DIRECTORY || path.join(__dirname, "certificates");
+    const signerCertPath = mustFile(path.join(certDir, "signerCert.pem"));
+    const signerKeyPath  = mustFile(path.join(certDir, "signerKey.pem"));
+    const wwdrPath       = mustFile(path.join(certDir, "wwdr.pem"));
+
+    this.certs = {
+      signerCert: fs.readFileSync(signerCertPath),
+      signerKey: fs.readFileSync(signerKeyPath),
+      wwdr: fs.readFileSync(wwdrPath),
+      signerKeyPassphrase: process.env.APPLE_CERT_PASSWORD || ""
+    };
+
+    // IMPORTANT: model directory (must end with .pass)
+    this.modelDir = mustDir(path.join(__dirname, "models", "eventTicket.pass"));
+    mustFile(path.join(this.modelDir, "pass.json"));
+    mustFile(path.join(this.modelDir, "icon.png"));
+    mustFile(path.join(this.modelDir, "icon@2x.png"));
   }
 
-  validateCertificates() {
-    const requiredFiles = [
-      'wwdr.pem',
-      'signerCert.pem',
-      'signerKey.pem'
-    ];
-
-    requiredFiles.forEach(file => {
-      const filePath = path.join(this.certDirectory, file);
-      if (!fs.existsSync(filePath)) {
-        console.warn(`Warning: ${file} not found in ${this.certDirectory}`);
+  async generatePass(userId, passData = {}) {
+    const pass = new PKPass(
+      { model: this.modelDir },        // <-- THIS is key: tells v3 to copy files from the model folder
+      this.certs,
+      {
+        passTypeIdentifier: passData.passTypeIdentifier || "pass.lynkmecard.new",
+        teamIdentifier:     passData.teamIdentifier     || "93Y286GLAM",
+        organizationName:   passData.organizationName   || "LynkMe",
+        serialNumber: String(userId)
       }
+    );
+
+    // v3 requires type before fields
+    pass.type = "eventTicket";
+
+    // Fields
+    pass.primaryFields.push({
+      key: "name",
+      label: "NAME",
+      value: passData.memberName || "Member"
     });
-  }
+    pass.secondaryFields.push({
+      key: "tier",
+      label: passData.headerLabel || "EVENT",
+      value: passData.headerValue || "VIP Access"
+    });
+    pass.auxiliaryFields.push({
+      key: "loc",
+      label: "Location",
+      value: passData.location || "—"
+    });
 
-  /**
-   * Generates an Apple Wallet pass
-   * @param {string} userId - Unique identifier for the user
-   * @param {object} passData - Data to include in the pass
-   * @returns {Promise<string>} - URL to the generated pass
-   */
-  async generatePass(userId, passData) {
-    try {
-      const pass = new PKPass({
-        model: path.join(__dirname, 'models', 'eventTicket.pass'),
-        certificates: {
-          wwdr: fs.readFileSync(path.join(this.certDirectory, 'wwdr.pem')),
-          signerCert: fs.readFileSync(path.join(this.certDirectory, 'signerCert.pem')),
-          signerKey: fs.readFileSync(path.join(this.certDirectory, 'signerKey.pem')),
-          signerKeyPassphrase: process.env.APPLE_CERT_PASSWORD || ''
-        }
-      });
+    // Barcode/QR
+    const qr = {
+      format: "PKBarcodeFormatQR",
+      message: `https://lynk.me${passData.referrerPath || `/profile/${userId}`}`,
+      messageEncoding: "iso-8859-1"
+    };
+    if (typeof pass.setBarcodes === "function") pass.setBarcodes([qr]);
+    else { pass.barcode = qr; pass.barcodes = [qr]; }
 
-      // Header field
-      pass.headerFields.push({
-        key: 'event',
-        label: passData.headerLabel || 'EVENT',
-        value: passData.headerValue || 'VIP Access'
-      });
+    // Belt & suspenders: explicitly add icons too (in case model copy is skipped)
+    const icon1x = path.join(this.modelDir, "icon.png");
+    const icon2x = path.join(this.modelDir, "icon@2x.png");
+    pass.addBuffer("icon.png", fs.readFileSync(icon1x));
+    pass.addBuffer("icon@2x.png", fs.readFileSync(icon2x));
 
-      // Primary field
-      pass.primaryFields.push({
-        key: 'name',
-        label: passData.primaryLabel || 'NAME',
-        value: passData.memberName || 'Member'
-      });
-
-      // Secondary field
-      pass.secondaryFields.push({
-        key: 'location',
-        label: passData.secondaryLabel || 'LOCATION',
-        value: passData.location || 'Main Entrance'
-      });
-
-      // Auxiliary (optional)
-      if (passData.subheader) {
-        pass.auxiliaryFields = [
-          {
-            key: 'sub',
-            label: 'SUBHEADER',
-            value: passData.subheader
-          }
-        ];
-      }
-
-      // Set a unique serial number
-      pass.serialNumber = `pass-${userId}-${Date.now()}`;
-
-      // General info
-      pass.organizationName = passData.organizationName || 'Your Organization';
-      pass.description = passData.description || 'Event Access Pass';
-
-      // Barcode
-      pass.barcodes = [
-        {
-          format: 'PKBarcodeFormatQR',
-          message: passData.referrerPath || `pass-${userId}`,
-          messageEncoding: 'iso-8859-1'
-        }
-      ];
-
-      // Images (optional logo or hero image)
-      if (passData.logoPath && fs.existsSync(passData.logoPath)) {
-        pass.loadImage('icon.png', fs.readFileSync(passData.logoPath));
-        pass.loadImage('logo.png', fs.readFileSync(passData.logoPath));
-      }
-
-      // Create the pass
-      const passBuffer = pass.getAsBuffer();
-
-      // Upload pass to cloud and return URL (stub)
-      const passUrl = await this.uploadPassToCloud(passBuffer, userId);
-      return passUrl;
-    } catch (error) {
-      console.error('Error generating Apple Wallet pass:', error);
-      throw new Error('Failed to generate Apple Wallet pass');
-    }
-  }
-
-  async uploadPassToCloud(passBuffer, userId) {
-    // In production, use S3/GCS/etc.
-    return `https://your-api-domain.com/passes/apple/${userId}-${Date.now()}.pkpass`;
+    // Export
+    return await pass.getAsBuffer();
   }
 }
 
