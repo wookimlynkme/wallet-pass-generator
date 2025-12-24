@@ -1,13 +1,16 @@
-// File: index.js
 const express = require("express");
 const cors = require("cors");
 const bodyParser = require("body-parser");
 require("dotenv").config();
 
-const { AppleWallet } = require("./apple-wallet"); // your generator
+const { initAppleCerts } = require("./secrets/initAppleCerts");
+const { AppleWallet } = require("./apple-wallet");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+initAppleCerts();
+
 
 // Middleware
 app.use(cors());
