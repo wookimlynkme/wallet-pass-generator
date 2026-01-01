@@ -27,7 +27,7 @@ function initAppleCerts() {
   writeFromEnv("APPLE_SIGNER_KEY_B64", signerKey);
   writeFromEnv("APPLE_WWDR_CERT_B64", wwdr);
 
-  // 🔍 Verification logs (SAFE: no secret contents logged)
+  // Verification logs (SAFE: no secret contents logged)
   console.log("[AppleCerts] Init complete");
   console.log("[AppleCerts] signerCert exists:", fs.existsSync(signerCert));
   console.log("[AppleCerts] signerKey exists:", fs.existsSync(signerKey));

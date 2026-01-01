@@ -1,5 +1,4 @@
 // apple-wallet.js — CommonJS, passkit-generator v3
-// npm i passkit-generator@^3
 const fs = require("fs");
 const path = require("path");
 const { PKPass } = require("passkit-generator");
@@ -36,12 +35,13 @@ class AppleWallet {
 
   async generatePass(userId, passData = {}) {
     const pass = new PKPass(
-      { model: this.modelDir },        // <-- THIS is key: tells v3 to copy files from the model folder
+      { model: this.modelDir },
       this.certs,
       {
         passTypeIdentifier: passData.passTypeIdentifier || "pass.lynkmecard.new",
         teamIdentifier:     passData.teamIdentifier     || "93Y286GLAM",
         organizationName:   passData.organizationName   || "LynkMe",
+        description:        passData.description        || "LynkMe Membership Pass",
         serialNumber: String(userId)
       }
     );
@@ -66,16 +66,19 @@ class AppleWallet {
       value: passData.location || "—"
     });
 
-    // Barcode/QR
-    const qr = {
-      format: "PKBarcodeFormatQR",
-      message: `https://lynk.me${passData.referrerPath || `/profile/${userId}`}`,
-      messageEncoding: "iso-8859-1"
-    };
-    if (typeof pass.setBarcodes === "function") pass.setBarcodes([qr]);
-    else { pass.barcode = qr; pass.barcodes = [qr]; }
+// Barcode/QR
+const qr = {
+  format: "PKBarcodeFormatQR",
+  message: `https://lynk.me${passData.referrerPath || `/profile/${userId}`}`,
+  messageEncoding: "iso-8859-1"
+};
 
-    // Belt & suspenders: explicitly add icons too (in case model copy is skipped)
+// v3: set directly (most reliable)
+pass.barcodes = [qr];
+pass.barcode = qr;
+
+
+    // Belt & suspenders: explicitly add icons too
     const icon1x = path.join(this.modelDir, "icon.png");
     const icon2x = path.join(this.modelDir, "icon@2x.png");
     pass.addBuffer("icon.png", fs.readFileSync(icon1x));

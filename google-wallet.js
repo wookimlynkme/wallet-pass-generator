@@ -7,7 +7,7 @@ require('dotenv').config();
 
 class GoogleWallet {
   constructor() {
-    // 🔐 Load credentials from JSON file
+    // Load credentials from JSON file
     const keyPath = path.join(__dirname, 'keys', 'service-account.json');
     const keyFile = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
 

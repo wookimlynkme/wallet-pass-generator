@@ -21,7 +21,7 @@ app.get("/health", (req, res) => res.status(200).send("OK"));
 
 /**
  * POST /generate-pass
- * Returns a signed Apple Wallet .pkpass (attachment).
+ * Returns a signed Apple Wallet .pkpass
  */
 app.post("/generate-pass", async (req, res) => {
   try {
@@ -46,10 +46,7 @@ app.post("/generate-pass", async (req, res) => {
   }
 });
 
-/**
- * GET /apple-pass/:userId
- * Direct pkpass (no .pkpass suffix). Kept for compatibility.
- */
+
 app.get("/apple-pass/:userId", async (req, res) => {
   try {
     const userId = req.params.userId;
@@ -57,8 +54,8 @@ app.get("/apple-pass/:userId", async (req, res) => {
 
     const buf = await wallet.generatePass(userId, {
       organizationName: "LynkMe",
-      teamIdentifier: "93Y286GLAM",               // <-- your Team ID
-      passTypeIdentifier: "pass.lynkmecard.new",  // <-- must match your pass type cert CN
+      teamIdentifier: "93Y286GLAM",               // <-- Team ID
+      passTypeIdentifier: "pass.lynkmecard.new",  
       memberName: "Test User",
       headerLabel: "EVENT",
       headerValue: "VIP Access",
@@ -112,10 +109,7 @@ app.get("/apple-pass/:userId.pkpass", async (req, res) => {
   }
 });
 
-/**
- * GET /add/:userId
- * HTML "bridge" page that immediately links/redirects to the .pkpass URL.
- */
+
 app.get("/add/:userId", (req, res) => {
   const id = encodeURIComponent(req.params.userId);
   res.set("Content-Type", "text/html; charset=utf-8");
