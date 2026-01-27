@@ -32,16 +32,9 @@ class AppleWallet {
 
     // IMPORTANT: model directory (must end with .pass)
     this.modelDir = mustDir(path.join(__dirname, "models", "eventTicket.pass"));
-
-    // Required template files
     mustFile(path.join(this.modelDir, "pass.json"));
     mustFile(path.join(this.modelDir, "icon.png"));
     mustFile(path.join(this.modelDir, "icon@2x.png"));
-    // Not strictly required to boot, but required for your visuals:
-    mustFile(path.join(this.modelDir, "logo.png"));
-    mustFile(path.join(this.modelDir, "logo@2x.png"));
-    mustFile(path.join(this.modelDir, "strip.png"));
-    mustFile(path.join(this.modelDir, "strip@2x.png"));
 
     if (!loggedModelDir) {
       loggedModelDir = true;
@@ -55,13 +48,8 @@ class AppleWallet {
     }
   }
 
-  /**
-   * @param {string} userId - user identifier (should not include .pkpass)
-   * @param {object} passData - metadata from LynkMe
-   * @returns {Promise<Buffer>}
-   */
   async generatePass(userId, passData = {}) {
-    // Defensive: if a route accidentally passes "XYZ.pkpass"
+    // Defensive: if route passes "XYZ.pkpass"
     const cleanUserId = String(userId).replace(/\.pkpass$/i, "");
 
     const pass = await PKPass.from(
@@ -81,56 +69,47 @@ class AppleWallet {
     // v3 requires type before fields
     pass.type = "eventTicket";
 
-    // Clear any template fields if present
-    pass.primaryFields = [];
-    pass.secondaryFields = [];
-    pass.auxiliaryFields = [];
-    pass.backFields = [];
+    // Clear existing fields IN PLACE (v3 exposes getter-only arrays)
+    pass.primaryFields.length = 0;
+    pass.secondaryFields.length = 0;
+    pass.auxiliaryFields.length = 0;
+    pass.backFields.length = 0;
 
-    // ===== Visible front fields =====
-    // Big text
+    // ===== Front fields: Name + Title =====
     pass.primaryFields.push({
       key: "name",
       label: "NAME",
       value: passData.memberName || "Member",
     });
 
-    // Under the name
     pass.secondaryFields.push({
       key: "title",
       label: "TITLE",
-      value: passData.title || passData.headerValue || "—",
+      value: passData.title || "—",
     });
 
-    // Optional: add a back field like the URL (nice for debugging)
-    if (passData.referrerPath || passData.profileUrl) {
-      pass.backFields.push({
-        key: "profile",
-        label: "Profile",
-        value:
-          passData.profileUrl ||
-          `https://lynk.me${passData.referrerPath || `/profile/${cleanUserId}`}`,
-      });
-    }
-
-    // ===== QR Code (Wallet-native) =====
-    // IMPORTANT: write to pass.data so it actually serializes into pass.json
-    const qrUrl =
+    // Optional back field for debugging / convenience
+    const profileUrl =
       passData.profileUrl ||
       `https://lynk.me${passData.referrerPath || `/profile/${cleanUserId}`}`;
 
+    pass.backFields.push({
+      key: "profile",
+      label: "Profile",
+      value: profileUrl,
+    });
+
+    // ===== QR Code (Wallet-native) =====
+    // IMPORTANT: write into pass.data so it serializes into pass.json
     pass.data.barcode = {
       format: "PKBarcodeFormatQR",
-      message: qrUrl,
+      message: profileUrl,
       messageEncoding: "iso-8859-1",
       altText: "Scan to open profile",
     };
-
-    // iOS 13+ prefers barcodes[]
     pass.data.barcodes = [pass.data.barcode];
 
-    // ===== Ensure template imagery ships =====
-    // (Robust against any template-copy weirdness)
+    // ===== Ensure template imagery ships (robust) =====
     ["icon.png", "icon@2x.png", "logo.png", "logo@2x.png", "strip.png", "strip@2x.png"].forEach(
       (asset) => {
         const filePath = path.join(this.modelDir, asset);
