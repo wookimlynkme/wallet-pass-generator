@@ -34,9 +34,11 @@ class AppleWallet {
   }
 
   async generatePass(userId, passData = {}) {
-    const pass = new PKPass(
-      { model: this.modelDir },
-      this.certs,
+    const pass = await PKPass.from(
+      {
+        model: this.modelDir,
+        certificates: this.certs
+      },
       {
         passTypeIdentifier: passData.passTypeIdentifier || "pass.lynkmecard.new",
         teamIdentifier:     passData.teamIdentifier     || "93Y286GLAM",
