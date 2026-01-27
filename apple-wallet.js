@@ -79,7 +79,7 @@ class AppleWallet {
     pass.primaryFields.push({
       key: "name",
       label: "NAME",
-      value: passData.memberName || "Member",
+      value: passData.memberName || "Test User",
     });
 
     pass.secondaryFields.push({
@@ -88,12 +88,12 @@ class AppleWallet {
       value: passData.title || "—",
     });
 
-    // Build the profile URL for both QR + back field
+    // Build the profile URL (use cleanUserId everywhere)
     const profileUrl =
       passData.profileUrl ||
       `https://lynk.me${passData.referrerPath || `/profile/${cleanUserId}`}`;
 
-    // Optional back field (nice for debug)
+    // Optional back field
     pass.backFields.push({
       key: "profile",
       label: "Profile",
@@ -101,7 +101,6 @@ class AppleWallet {
     });
 
     // ===== QR Code (Wallet-native) =====
-    // Robust across passkit-generator builds: prefer setBarcodes, otherwise fall back
     const qr = {
       format: "PKBarcodeFormatQR",
       message: profileUrl,
@@ -109,26 +108,23 @@ class AppleWallet {
       altText: "Scan to open profile",
     };
 
-    // (Optional) one-time debug during rollout — comment out later
-    // console.log("[AppleWallet] pass keys:", Object.keys(pass));
-    // console.log("[AppleWallet] has setBarcodes:", typeof pass.setBarcodes);
-    // console.log("[AppleWallet] has props:", !!pass.props, "has _props:", !!pass._props, "has data:", !!pass.data);
-
+    // Prefer official setter if available
     if (typeof pass.setBarcodes === "function") {
       pass.setBarcodes([qr]);
-    } else {
-      pass.barcodes = [qr];
-      pass.barcode = qr;
+    }
 
-      // Some builds store raw props under these
-      if (pass.props && typeof pass.props === "object") {
-        pass.props.barcodes = [qr];
-        pass.props.barcode = qr;
-      }
-      if (pass._props && typeof pass._props === "object") {
-        pass._props.barcodes = [qr];
-        pass._props.barcode = qr;
-      }
+    // Also set on pass instance (some builds serialize from these)
+    pass.barcodes = [qr];
+    pass.barcode = qr;
+
+    // Some passkit-generator v3 builds serialize from internal props
+    if (pass.props && typeof pass.props === "object") {
+      pass.props.barcodes = [qr];
+      pass.props.barcode = qr;
+    }
+    if (pass._props && typeof pass._props === "object") {
+      pass._props.barcodes = [qr];
+      pass._props.barcode = qr;
     }
 
     // ===== Ensure template imagery ships (robust) =====
