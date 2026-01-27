@@ -3,6 +3,8 @@ const fs = require("fs");
 const path = require("path");
 const { PKPass } = require("passkit-generator");
 
+let loggedModelDir = false;
+
 function mustDir(p) {
   if (!fs.existsSync(p)) throw new Error(`Missing required folder: ${p}`);
   return p;
@@ -31,6 +33,17 @@ class AppleWallet {
     mustFile(path.join(this.modelDir, "pass.json"));
     mustFile(path.join(this.modelDir, "icon.png"));
     mustFile(path.join(this.modelDir, "icon@2x.png"));
+
+    if (!loggedModelDir) {
+      loggedModelDir = true;
+      try {
+        const entries = fs.readdirSync(this.modelDir).sort();
+        console.log("[AppleWallet] modelDir:", this.modelDir);
+        console.log("[AppleWallet] template files:", entries);
+      } catch (err) {
+        console.error("[AppleWallet] Failed to read modelDir", this.modelDir, err);
+      }
+    }
   }
 
   async generatePass(userId, passData = {}) {
@@ -80,11 +93,15 @@ pass.barcodes = [qr];
 pass.barcode = qr;
 
 
-    // Belt & suspenders: explicitly add icons too
-    const icon1x = path.join(this.modelDir, "icon.png");
-    const icon2x = path.join(this.modelDir, "icon@2x.png");
-    pass.addBuffer("icon.png", fs.readFileSync(icon1x));
-    pass.addBuffer("icon@2x.png", fs.readFileSync(icon2x));
+    // Ensure template imagery ships even if model loading fails in-prod
+    ["icon.png", "icon@2x.png", "logo.png", "logo@2x.png", "strip.png", "strip@2x.png"].forEach((asset) => {
+      const filePath = path.join(this.modelDir, asset);
+      if (fs.existsSync(filePath)) {
+        pass.addBuffer(asset, fs.readFileSync(filePath));
+      } else {
+        console.warn(`[AppleWallet] Missing template asset: ${asset} (expected under ${this.modelDir})`);
+      }
+    });
 
     // Export
     return await pass.getAsBuffer();
