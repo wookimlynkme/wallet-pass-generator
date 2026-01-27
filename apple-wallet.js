@@ -70,12 +70,12 @@ class AppleWallet {
     pass.type = "eventTicket";
 
     // Clear existing fields IN PLACE (v3 exposes getter-only arrays)
-    pass.primaryFields.length = 0;
-    pass.secondaryFields.length = 0;
-    pass.auxiliaryFields.length = 0;
-    pass.backFields.length = 0;
+    if (pass.primaryFields) pass.primaryFields.length = 0;
+    if (pass.secondaryFields) pass.secondaryFields.length = 0;
+    if (pass.auxiliaryFields) pass.auxiliaryFields.length = 0;
+    if (pass.backFields) pass.backFields.length = 0;
 
-    // ===== Front fields: Name + Title =====
+    // ===== Front fields: Name + Title (no Location row) =====
     pass.primaryFields.push({
       key: "name",
       label: "NAME",
@@ -88,11 +88,12 @@ class AppleWallet {
       value: passData.title || "—",
     });
 
-    // Optional back field for debugging / convenience
+    // Build the profile URL for both QR + back field
     const profileUrl =
       passData.profileUrl ||
       `https://lynk.me${passData.referrerPath || `/profile/${cleanUserId}`}`;
 
+    // Optional back field (nice for debug)
     pass.backFields.push({
       key: "profile",
       label: "Profile",
@@ -100,14 +101,35 @@ class AppleWallet {
     });
 
     // ===== QR Code (Wallet-native) =====
-    // IMPORTANT: write into pass.data so it serializes into pass.json
-    pass.data.barcode = {
+    // Robust across passkit-generator builds: prefer setBarcodes, otherwise fall back
+    const qr = {
       format: "PKBarcodeFormatQR",
       message: profileUrl,
       messageEncoding: "iso-8859-1",
       altText: "Scan to open profile",
     };
-    pass.data.barcodes = [pass.data.barcode];
+
+    // (Optional) one-time debug during rollout — comment out later
+    // console.log("[AppleWallet] pass keys:", Object.keys(pass));
+    // console.log("[AppleWallet] has setBarcodes:", typeof pass.setBarcodes);
+    // console.log("[AppleWallet] has props:", !!pass.props, "has _props:", !!pass._props, "has data:", !!pass.data);
+
+    if (typeof pass.setBarcodes === "function") {
+      pass.setBarcodes([qr]);
+    } else {
+      pass.barcodes = [qr];
+      pass.barcode = qr;
+
+      // Some builds store raw props under these
+      if (pass.props && typeof pass.props === "object") {
+        pass.props.barcodes = [qr];
+        pass.props.barcode = qr;
+      }
+      if (pass._props && typeof pass._props === "object") {
+        pass._props.barcodes = [qr];
+        pass._props.barcode = qr;
+      }
+    }
 
     // ===== Ensure template imagery ships (robust) =====
     ["icon.png", "icon@2x.png", "logo.png", "logo@2x.png", "strip.png", "strip@2x.png"].forEach(
