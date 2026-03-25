@@ -12,7 +12,28 @@ function writeFromEnv(envVar, targetPath) {
   fs.writeFileSync(targetPath, buffer, { mode: 0o600 });
 }
 
+function hasLocalCertFiles(certDir) {
+  return ["signerCert.pem", "signerKey.pem", "wwdr.pem"].every((file) =>
+    fs.existsSync(path.join(certDir, file))
+  );
+}
+
 function initAppleCerts() {
+  const configuredCertDir = process.env.APPLE_CERT_DIRECTORY
+    ? path.resolve(process.cwd(), process.env.APPLE_CERT_DIRECTORY)
+    : path.join(process.cwd(), "certificates");
+
+  if (hasLocalCertFiles(configuredCertDir)) {
+    console.log("[AppleCerts] Using local certificate files from", configuredCertDir);
+    process.env.APPLE_CERT_DIRECTORY = configuredCertDir;
+
+    return {
+      signerCert: path.join(configuredCertDir, "signerCert.pem"),
+      signerKey: path.join(configuredCertDir, "signerKey.pem"),
+      wwdr: path.join(configuredCertDir, "wwdr.pem"),
+    };
+  }
+
   const certDir = "/tmp/certificates";
 
   // Ensure directory exists
@@ -32,7 +53,8 @@ function initAppleCerts() {
   console.log("[AppleCerts] signerCert exists:", fs.existsSync(signerCert));
   console.log("[AppleCerts] signerKey exists:", fs.existsSync(signerKey));
   console.log("[AppleCerts] wwdr exists:", fs.existsSync(wwdr));
-  console.log("[AppleCerts] APPLE_CERT_DIRECTORY =", process.env.APPLE_CERT_DIRECTORY || "(not set)");
+  process.env.APPLE_CERT_DIRECTORY = certDir;
+  console.log("[AppleCerts] APPLE_CERT_DIRECTORY =", process.env.APPLE_CERT_DIRECTORY);
 
   return {
     signerCert,

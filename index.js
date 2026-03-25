@@ -47,45 +47,12 @@ app.post("/generate-pass", async (req, res) => {
 });
 
 
-app.get("/apple-pass/:userId", async (req, res) => {
+async function sendApplePass(res, userId, routeLabel) {
   try {
-    const userId = req.params.userId;
     const wallet = new AppleWallet();
+    const cleanUserId = String(userId).replace(/\.pkpass$/i, "");
 
-    const buf = await wallet.generatePass(userId, {
-      organizationName: "LynkMe",
-      teamIdentifier: "93Y286GLAM",               // <-- Team ID
-      passTypeIdentifier: "pass.lynkmecard.new",  
-      memberName: "Test User",
-      headerLabel: "EVENT",
-      headerValue: "VIP Access",
-      location: "Main Entrance",
-      referrerPath: `/profile/${userId}`
-    });
-
-    res.status(200);
-    res.set("Content-Type", "application/vnd.apple.pkpass");
-    res.set("Content-Disposition", `inline; filename="${userId}.pkpass"`);
-    res.set("Content-Length", String(buf.length));
-    res.set("Cache-Control", "no-store");
-    res.set("X-Content-Type-Options", "nosniff");
-    return res.end(buf);
-  } catch (e) {
-    console.error("GET /apple-pass/:userId error:", e);
-    return res.status(500).json({ error: "Failed to generate pass", details: e.message });
-  }
-});
-
-/**
- * GET /apple-pass/:userId.pkpass
- * Same as above, but with a .pkpass suffix (some iOS builds prefer this).
- */
-app.get("/apple-pass/:userId.pkpass", async (req, res) => {
-  try {
-    const userId = req.params.userId;
-    const wallet = new AppleWallet();
-
-    const buf = await wallet.generatePass(userId, {
+    const buf = await wallet.generatePass(cleanUserId, {
       organizationName: "LynkMe",
       teamIdentifier: "93Y286GLAM",
       passTypeIdentifier: "pass.lynkmecard.new",
@@ -93,20 +60,32 @@ app.get("/apple-pass/:userId.pkpass", async (req, res) => {
       headerLabel: "EVENT",
       headerValue: "VIP Access",
       location: "Main Entrance",
-      referrerPath: `/profile/${userId}`
+      referrerPath: `/profile/${cleanUserId}`
     });
 
     res.status(200);
     res.set("Content-Type", "application/vnd.apple.pkpass");
-    res.set("Content-Disposition", `inline; filename="${userId}.pkpass"`);
+    res.set("Content-Disposition", `inline; filename="${cleanUserId}.pkpass"`);
     res.set("Content-Length", String(buf.length));
     res.set("Cache-Control", "no-store");
     res.set("X-Content-Type-Options", "nosniff");
     return res.end(buf);
   } catch (e) {
-    console.error("GET /apple-pass/:userId.pkpass error:", e);
+    console.error(`${routeLabel} error:`, e);
     return res.status(500).json({ error: "Failed to generate pass", details: e.message });
   }
+}
+
+/**
+ * GET /apple-pass/:userId.pkpass
+ * Same as above, but with a .pkpass suffix (some iOS builds prefer this).
+ */
+app.get("/apple-pass/:userId.pkpass", async (req, res) => {
+  return sendApplePass(res, req.params.userId, "GET /apple-pass/:userId.pkpass");
+});
+
+app.get("/apple-pass/:userId", async (req, res) => {
+  return sendApplePass(res, req.params.userId, "GET /apple-pass/:userId");
 });
 
 

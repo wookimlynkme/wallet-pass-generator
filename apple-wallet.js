@@ -52,6 +52,18 @@ class AppleWallet {
     // Defensive: if route passes "XYZ.pkpass"
     const cleanUserId = String(userId).replace(/\.pkpass$/i, "");
 
+    // Build the profile URL (use cleanUserId everywhere)
+    const profileUrl =
+      passData.profileUrl ||
+      `https://lynk.me${passData.referrerPath || `/profile/${cleanUserId}`}`;
+
+    const qr = {
+      format: "PKBarcodeFormatQR",
+      message: profileUrl,
+      messageEncoding: "iso-8859-1",
+      altText: "Scan to open profile",
+    };
+
     const pass = await PKPass.from(
       {
         model: this.modelDir,
@@ -63,6 +75,8 @@ class AppleWallet {
         organizationName: passData.organizationName || "LynkMe",
         description: passData.description || "LynkMe Membership Pass",
         serialNumber: cleanUserId,
+        barcode: qr,
+        barcodes: [qr],
       }
     );
 
@@ -88,11 +102,6 @@ class AppleWallet {
       value: passData.title || "—",
     });
 
-    // Build the profile URL (use cleanUserId everywhere)
-    const profileUrl =
-      passData.profileUrl ||
-      `https://lynk.me${passData.referrerPath || `/profile/${cleanUserId}`}`;
-
     // Optional back field
     pass.backFields.push({
       key: "profile",
@@ -100,17 +109,9 @@ class AppleWallet {
       value: profileUrl,
     });
 
-    // ===== QR Code (Wallet-native) =====
-    const qr = {
-      format: "PKBarcodeFormatQR",
-      message: profileUrl,
-      messageEncoding: "iso-8859-1",
-      altText: "Scan to open profile",
-    };
-
     // Prefer official setter if available
     if (typeof pass.setBarcodes === "function") {
-      pass.setBarcodes([qr]);
+      pass.setBarcodes(qr);
     }
 
     // Also set on pass instance (some builds serialize from these)
